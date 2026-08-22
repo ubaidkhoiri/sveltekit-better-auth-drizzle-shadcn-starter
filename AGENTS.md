@@ -1,6 +1,62 @@
-# AGENTS.md — Aturan untuk AI Agent & Developer
+# AGENTS.md — Konteks Project & Aturan untuk AI Agent
 
-Aturan wajib saat menambah/mengubah kode di boilerplate ini, agar UI dan fungsi tetap aman untuk semua pengguna target.
+## Ringkasan
+
+SvelteKit PWA starter untuk app internal: auth lengkap + kebijakan login yang bisa diatur runtime via UI. Bahasa UI: **Indonesia**. Node 20+, Windows dev environment (PowerShell).
+
+## Stack
+
+| Lapisan | Teknologi |
+| --- | --- |
+| Framework | SvelteKit 2 + Svelte 5 (runes) + Vite 8 rolldown |
+| Auth | Better Auth 1.7 (`better-auth/svelte` client) |
+| DB | Drizzle ORM + NeonDB (`@neondatabase/serverless` neon-http) |
+| UI | shadcn-svelte + Tailwind CSS v4 |
+| Form | Superforms v2 + Zod v4 |
+| Rate limit | @upstash/ratelimit (opsional; fail-open tanpa env Upstash) |
+| PWA | @vite-pwa/sveltekit (Cache First, toast update) |
+
+## Perintah
+
+```sh
+npm run dev          # dev server
+npm run check        # svelte-check (harus 0 error)
+npm test             # vitest unit test
+npm run build        # build produksi + cek budget bundle <100KB gzip
+npm run db:generate  # generate migration Drizzle dari schema
+npm run db:push      # push schema langsung ke NeonDB
+npx playwright test  # e2e
+```
+
+Verifikasi minimum setelah mengubah kode: `npm run check` + `npm test`.
+
+## Env
+
+Wajib: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Opsional: `UPSTASH_REDIS_REST_URL/TOKEN`, fallback flag (`SIGNUP_ENABLED`, `LOGIN_METHOD`, `USERNAME_LOGIN`, `EMAIL_VERIFICATION`, `AUTO_VERIFY_DOMAINS`, `RESET_MODE`). Lihat `.env.example`.
+
+## Struktur kunci
+
+- `src/lib/server/auth.ts` — instance Better Auth. **Pola penting**: semua kebijakan dinamis dievaluasi di `hooks.before`/`hooks.after` per-endpoint (`/sign-up/email`, `/sign-in/email`, `/sign-in/username`, `/sign-in/social`, `/forget-password`), bukan config statis — jadi toggle berlaku instan tanpa restart.
+- `src/lib/server/config.ts` — sumber kebenaran flag: tabel `app_config` → cache 3 detik → fallback env. Fungsi: `getAuthFlags()`, `setAuthFlags()`, `isConfigInitialized()`.
+- `src/lib/server/db/schema.ts` — Drizzle schema. Tabel user punya kolom ekstra: `username`, `display_username`, `role` (`'owner'|'admin'|'user'`). Role wajib dideklarasikan di `user.additionalFields` agar muncul di tipe session.
+- `src/routes/+layout.server.ts` — paksa redirect semua halaman ke `/setup/wizard` selama `app_config` kosong (kecuali `/setup*`, `/auth*`, `/api*`). Jangan hapus guard ini.
+- `src/routes/setup/wizard/` — first-run: buat akun owner (role='owner', emailVerified=true, lolos dari blokir signup karena `isConfigInitialized()` masih false), tulis semua flag.
+- `src/routes/dashboard/settings/` — ubah flag runtime; hanya role owner/admin.
+- `src/lib/server/domains.ts` — helper pure domain whitelist (+ unit test).
+- `src/lib/server/email.ts` — **stub** (console.log). Ganti dengan Resend/SES sebelum butuh email verifikasi/reset sungguhan.
+- `drizzle.config.ts` — baca `DATABASE_URL` dari `.env`.
+
+## Konvensi kode
+
+- Validasi input: skema Zod di `src/lib/schemas.ts`, dipakai bersama oleh Superforms (client+server).
+- Server-only code di `src/lib/server/*` (dijamin tidak bocor ke client oleh SvelteKit).
+- UI komponen shadcn-svelte di `src/lib/components/ui/` — regenerate via CLI shadcn-svelte, jangan edit manual lebih dari perlu.
+- Svelte 5 runes (`$state`, `$derived`) — jangan campur sintaks stores lama.
+- Bahasa komentar & copy UI: Indonesia.
+
+## Aturan wajib saat menambah/mengubah kode
+
+Agar UI dan fungsi tetap aman untuk semua pengguna target.
 
 ## Target browser (floor)
 
